@@ -323,4 +323,7 @@ app.post(['/api/files/upload-dataurl', '/files/upload-dataurl'], (req, res) => {
 
 app.get(['/api/files', '/files'], (req, res) => res.json({ success: true, files: storedFiles }));
 
-export default app;
+// Vercel Serverless Handler
+export default (req, res) => {
+  return app(req, res);
+};
