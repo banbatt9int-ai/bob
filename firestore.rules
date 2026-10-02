@@ -1,0 +1,93 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'bondhon.biniyog@gmail.com' ||
+        (exists(/databases/$(database)/documents/members/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role == 'Admin')
+      );
+    }
+
+    // Molla Family Tree Members collection
+    match /family_members/{memberId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Bondhon O Biniyog Investments & Savings entries
+    match /investments/{invId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Members collection
+    match /members/{memberId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Monthly deposits
+    match /monthly_deposits/{depositId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Lumpsum deposits
+    match /lumpsum_deposits/{lumpsumId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Land investments (Public read, write)
+    match /lands/{landId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Directors board
+    match /directors/{directorId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Gallery
+    match /gallery/{galleryId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // System Settings
+    match /settings/{settingsId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
