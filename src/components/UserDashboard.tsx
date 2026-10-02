@@ -8,10 +8,10 @@ import {
   LumpsumDepositsModal,
   DueInstallmentsModal,
 } from './StatementModals';
-import { CloudflareR2ExplorerModal } from './CloudflareR2ExplorerModal';
+import { FirebaseCloudVaultModal } from './FirebaseCloudVaultModal';
 import { downloadElementAsJpg, downloadElementAsPdf } from '../utils/exportUtils';
-import { useCloudflareRealtime } from '../services/realtimeClient';
-import { uploadDataUrlToR2 } from '../services/r2Storage';
+import { useFirebaseRealtime } from '../services/realtimeClient';
+import { uploadDataUrlToStorage } from '../services/cloudStorage';
 
 interface UserDashboardProps {
   currentUser: Member;
@@ -68,7 +68,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Member land proposal modal state
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
 
-  // Statement & Cloudflare R2 Storage Modals
+  // Statement & Firebase Cloud Storage Modals
   const [showPaidInstallmentsModal, setShowPaidInstallmentsModal] = useState(false);
   const [showLumpsumDepositsModal, setShowLumpsumDepositsModal] = useState(false);
   const [showDueInstallmentsModal, setShowDueInstallmentsModal] = useState(false);
@@ -90,10 +90,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const myMonthly = monthlyDeposits.filter((d) => d.member_id === currentUser.member_id);
   const myLumpsum = lumpsumDeposits.filter((d) => d.member_id === currentUser.member_id);
 
-  // Real-time Cloudflare Durable Objects WebSocket listener for Member updates
+  // Real-time Firebase Firestore listener for Member updates
   useEffect(() => {
     if (!currentUser?.member_id) return;
-    const unsub = useCloudflareRealtime((event) => {
+    const unsub = useFirebaseRealtime((event) => {
       // Refresh on real-time broadcast
       onRefreshData();
     });
@@ -125,10 +125,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     try {
       let finalAvatarUrl = editAvatarUrl || currentUser.avatar_url;
 
-      // If user uploaded a new data-URL photo, upload to Cloudflare R2
+      // If user uploaded a new data-URL photo, upload to Firebase Storage
       if (editAvatarUrl && editAvatarUrl.startsWith('data:')) {
         try {
-          const r2Res = await uploadDataUrlToR2(editAvatarUrl, `avatar-${currentUser.member_id}.jpg`, 'avatar');
+          const r2Res = await uploadDataUrlToStorage(editAvatarUrl, `avatar-${currentUser.member_id}.jpg`, 'avatar');
           if (r2Res.success && r2Res.url) {
             finalAvatarUrl = r2Res.url;
           }
@@ -141,7 +141,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         avatar_url: finalAvatarUrl,
       };
 
-      // Call Cloudflare D1 API endpoint
+      // Call API endpoint
       const res = await fetch(`/api/members/${currentUser.member_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -155,7 +155,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const updatedUser = { ...currentUser, ...updateData };
       if (onUpdateUser) onUpdateUser(updatedUser);
       localStorage.setItem('bob_logged_user', JSON.stringify(updatedUser));
-      setProfileMsg({ type: 'success', text: 'প্রোফাইল ছবি ও তথ্য Cloudflare D1 ও R2-তে সংরক্ষিত হয়েছে!' });
+      setProfileMsg({ type: 'success', text: 'প্রোফাইল ছবি ও তথ্য Firebase ক্লাউডে সংরক্ষিত হয়েছে!' });
       onRefreshData();
 
       setTimeout(() => {
@@ -346,7 +346,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               />
               <button
                 onClick={() => setShowEditProfileModal(true)}
-                title="প্রোফাইল ছবি ও তথ্য পরিবর্তন করুন (Cloudflare D1 ও R2 Auto-Sync)"
+                title="প্রোফাইল ছবি ও তথ্য পরিবর্তন করুন (Firebase Firestore Auto-Sync)"
                 className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 rounded-2xl flex flex-col items-center justify-center text-white text-[10px] font-semibold transition cursor-pointer"
               >
                 <i className="fa-solid fa-camera text-sm mb-0.5 text-amber-300"></i>
@@ -373,10 +373,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   {currentUser.status === 'Active' ? 'সক্রিয় সদস্য (Active)' : 'অনুমোদন প্রক্রিয়াধীন (Pending)'}
                 </span>
 
-                {/* Cloudflare Realtime DO indicator */}
+                {/* Firebase Live Sync indicator */}
                 <span className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-bengali shadow-sm">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>Cloudflare Realtime (DO) সক্রিয়</span>
+                  <span>Firebase Firestore লাইভ সক্রিয়</span>
                 </span>
               </div>
 
@@ -390,7 +390,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           </div>
 
-          {/* Quick Action: Profile Edit, Cloudflare R2 Storage, Password Change, Printable Statement & Land Proposal */}
+          {/* Quick Action: Profile Edit, Firebase Storage, Password Change, Printable Statement & Land Proposal */}
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <button
               onClick={() => setShowEditProfileModal(true)}
@@ -402,10 +402,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
             <button
               onClick={() => setShowR2StorageModal(true)}
-              className="cursor-pointer px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white shadow-lg shadow-orange-600/30 text-xs sm:text-sm font-semibold font-bengali flex items-center gap-2 transition"
+              className="cursor-pointer px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg shadow-amber-600/30 text-xs sm:text-sm font-semibold font-bengali flex items-center gap-2 transition"
             >
-              <i className="fa-solid fa-cloud text-orange-200 text-base"></i>
-              <span>Cloudflare R2 ক্লাউড স্টোরেজ</span>
+              <i className="fa-solid fa-cloud text-amber-200 text-base"></i>
+              <span>Firebase ক্লাউড ভল্ট</span>
             </button>
 
             <button
@@ -1322,8 +1322,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         settings={settings}
       />
 
-      {/* 11. Cloudflare R2 Project Files & Archive Modal */}
-      <CloudflareR2ExplorerModal
+      {/* 11. Firebase Cloud Vault Project Files & Archive Modal */}
+      <FirebaseCloudVaultModal
         isOpen={showR2StorageModal}
         onClose={() => setShowR2StorageModal(false)}
       />
@@ -1408,7 +1408,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         </div>
       )}
-      {/* 13. Member Profile & Photo Edit Modal (Cloudflare D1 & R2) */}
+      {/* 13. Member Profile & Photo Edit Modal (Firebase Firestore) */}
       {showEditProfileModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fadeIn font-bengali">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
@@ -1419,7 +1419,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">প্রোফাইল তথ্য ও ছবি পরিবর্তন</h3>
-                  <p className="text-[11px] text-emerald-400">Cloudflare D1 & R2 Auto-Sync সক্রিয়</p>
+                  <p className="text-[11px] text-emerald-400">Firebase Firestore & Cloud Storage সক্রিয়</p>
                 </div>
               </div>
               <button
@@ -1502,7 +1502,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   className="cursor-pointer px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-600/30"
                 >
                   <i className={`fa-solid fa-cloud-arrow-up ${isSavingProfile ? 'animate-bounce' : ''}`}></i>
-                  <span>{isSavingProfile ? 'ক্লাউডে সেভ হচ্ছে...' : 'Cloudflare R2 ও D1-এ সেভ'}</span>
+                  <span>{isSavingProfile ? 'ক্লাউডে সেভ হচ্ছে...' : 'Firebase ক্লাউডে সংরক্ষণ'}</span>
                 </button>
               </div>
             </form>

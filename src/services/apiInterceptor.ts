@@ -1,9 +1,9 @@
 import { handleLocalApi } from './localBackend';
 
 /**
- * Initializes transparent API fallback for Cloudflare Pages / Static Hosting.
- * If the server is not available or returns 404/HTML (as Cloudflare Pages static hosting does),
- * it seamlessly routes through the in-memory Cloudflare D1 compatibility backend.
+ * Initializes transparent API fallback for Vercel Serverless / Static Hosting.
+ * If the server is not available or returns 404/HTML (as SPA routing fallback does),
+ * it seamlessly routes through the client-side Firebase compatibility backend.
  */
 export function setupApiInterceptor() {
   if (typeof window === 'undefined') return;
@@ -43,7 +43,7 @@ export function setupApiInterceptor() {
         return response;
       }
 
-      // If Cloudflare Pages returned 404 or index.html fallback for an API call, fallback to local backend
+      // If Vercel returned 404 or index.html fallback for an API call, fallback to local backend
       // console.warn(`API route ${urlString} returned ${response.status} (${contentType}), using local client-side database.`);
     } catch (networkError) {
       // Network failure / offline: fallback to local database
@@ -73,7 +73,7 @@ export function setupApiInterceptor() {
       statusText: status === 200 || status === 201 ? 'OK' : 'Error',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'X-Backend-Source': 'Cloudflare-Local-Storage-Engine',
+        'X-Backend-Source': 'Firebase-Client-Storage-Engine',
       },
     });
   };

@@ -4,7 +4,7 @@ import App from './App.tsx';
 import './index.css';
 import { setupApiInterceptor } from './services/apiInterceptor';
 
-// Initialize Cloudflare Pages / Static fallback interceptor
+// Initialize Vercel & Firebase API interceptor
 setupApiInterceptor();
 
 createRoot(document.getElementById('root')!).render(

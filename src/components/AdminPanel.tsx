@@ -12,8 +12,8 @@ import type {
   Director,
 } from '../types';
 import { formatTaka, toBengaliDigits } from '../utils/bengaliUtils';
-import { CloudflareR2ExplorerModal } from './CloudflareR2ExplorerModal';
-import { useCloudflareRealtime } from '../services/realtimeClient';
+import { FirebaseCloudVaultModal } from './FirebaseCloudVaultModal';
+import { useFirebaseRealtime } from '../services/realtimeClient';
 import {
   exportDatabaseToExcel,
   exportTableToExcel,
@@ -111,7 +111,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [confirmPasswordForMember, setConfirmPasswordForMember] = useState<string>('');
   const [memberPasswordLoading, setMemberPasswordLoading] = useState<boolean>(false);
 
-  // Cloudflare R2 Explorer Modal in Admin
+  // Firebase Cloud Storage Explorer Modal in Admin
   const [showAdminR2Modal, setShowAdminR2Modal] = useState<boolean>(false);
 
   // Single Member Ledger Export Modal (PDF / JPG / Excel)
@@ -282,7 +282,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (lumpsumDeposits && lumpsumDeposits.length > 0) setLiveLumpsum(lumpsumDeposits);
   }, [lumpsumDeposits]);
 
-  // Cloudflare Realtime & Auto-Refresh timer for Admin Panel:
+  // Firebase Live Sync & Auto-Refresh timer for Admin Panel:
   // Automatically refreshes data every 10 seconds and instantly upon any realtime event
   useEffect(() => {
     const autoRefreshTimer = setInterval(() => {
@@ -290,7 +290,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setLastAutoSyncTime(new Date().toLocaleTimeString('bn-BD'));
     }, 10000);
 
-    const unsub = useCloudflareRealtime((_event) => {
+    const unsub = useFirebaseRealtime((_event) => {
       setLastAutoSyncTime(new Date().toLocaleTimeString('bn-BD'));
       onRefreshData();
     });
@@ -322,7 +322,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           directors: directorsList,
           settings,
         },
-        `Bondhon-D1-Full-Database-${new Date().toISOString().slice(0, 10)}.xlsx`
+        `Bondhon-Firebase-Full-Database-${new Date().toISOString().slice(0, 10)}.xlsx`
       );
 
       if (success) {
@@ -900,7 +900,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               onClick={handleExportFullDatabaseToExcel}
               disabled={isManualBackingUp}
               className="cursor-pointer px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition"
-              title="D1 ডাটাবেজের সম্পূর্ণ তথ্য (সকল টেবিল A to Z) Excel ফাইলে ডাউনলোড করুন"
+              title="Firebase ডাটাবেজের সম্পূর্ণ তথ্য (সকল টেবিল A to Z) Excel ফাইলে ডাউনলোড করুন"
             >
               <i className="fa-solid fa-file-excel text-sm"></i>
               <span>{isManualBackingUp ? 'এক্সপোর্ট হচ্ছে...' : 'ডাটাবেজ এক্সপোর্ট (Excel)'}</span>
@@ -1095,13 +1095,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <span>এ্যাডমিন আইডি ও পাসওয়ার্ড</span>
         </button>
 
-        {/* Cloudflare R2 Cloud Storage button */}
+        {/* Firebase Cloud Vault button */}
         <button
           onClick={() => setShowAdminR2Modal(true)}
-          className="cursor-pointer px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 bg-slate-900 text-orange-300 hover:text-white hover:bg-slate-800 border border-orange-500/40 ml-auto"
+          className="cursor-pointer px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 bg-slate-900 text-amber-300 hover:text-white hover:bg-slate-800 border border-amber-500/40 ml-auto"
         >
-          <i className="fa-solid fa-cloud text-orange-400"></i>
-          <span>Cloudflare R2 ক্লাউড স্টোরেজ</span>
+          <i className="fa-solid fa-cloud text-amber-400"></i>
+          <span>Firebase ক্লাউড ভল্ট</span>
         </button>
       </div>
 
@@ -4647,8 +4647,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Cloudflare R2 Storage Modal for Admin */}
-      <CloudflareR2ExplorerModal
+      {/* Firebase Cloud Storage Modal for Admin */}
+      <FirebaseCloudVaultModal
         isOpen={showAdminR2Modal}
         onClose={() => setShowAdminR2Modal(false)}
         isAdmin={true}

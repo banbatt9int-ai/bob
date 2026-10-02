@@ -9,8 +9,6 @@ import type {
   GalleryItem,
   DashboardStats,
   AppNotification,
-  FamilyMember,
-  FamilyInvestment,
 } from './types';
 import { SplashScreen } from './components/SplashScreen';
 import { Header } from './components/Header';
@@ -23,35 +21,19 @@ import { AuthModal } from './components/AuthModal';
 import { TermsModal } from './components/TermsModal';
 import { RoiCalculator } from './components/RoiCalculator';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
-import { FamilyTreeVisualizer } from './components/FamilyTreeVisualizer';
-import { FamilyMemberModal } from './components/FamilyMemberModal';
-import { BondhonBiniyogSection } from './components/BondhonBiniyogSection';
-import { FamilyHeritageSection } from './components/FamilyHeritageSection';
+import { FirebaseCloudVaultModal } from './components/FirebaseCloudVaultModal';
 import {
-  initialFamilyMembers,
-  initialFamilyInvestments,
-} from './data/initialFamilyData';
-import {
-  subscribeFamilyMembers,
-  subscribeInvestments,
-  addFamilyMember,
-  deleteFamilyMember,
-  addInvestment,
-} from './firebase';
-import { initialSystemSettings } from './services/initialData';
+  initialSystemSettings,
+} from './services/initialData';
+import { useFirebaseRealtime } from './services/realtimeClient';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
-  const [currentTab, setCurrentTab] = useState<string>('tree'); // Default landing: Family Tree
+  const [currentTab, setCurrentTab] = useState<string>('home');
   const [currentUser, setCurrentUser] = useState<Member | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [settings, setSettings] = useState<SystemSettings>({
-    ...initialSystemSettings,
-    project_title: 'মোল্লা ফ্যামিলি ট্রি ও বন্ধন ও বিনিয়োগ',
-    slogan_bengali: 'রক্তের বন্ধন • যৌথ কল্যাণ ও বিনিয়োগ',
-    notice_bengali: 'স্বাগতম! মরহুম আলহাজ্ব রহিম মোল্লা পরিবারের ডিজিটাল বংশলতিকা ও বন্ধন ও বিনিয়োগ পোর্টাল।',
-  });
+  const [settings, setSettings] = useState<SystemSettings>(initialSystemSettings);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [monthlyDeposits, setMonthlyDeposits] = useState<MonthlyDeposit[]>([]);
@@ -61,62 +43,17 @@ export default function App() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
+  const [showGlobalR2Modal, setShowGlobalR2Modal] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Molla Family Tree & Bondhon State (Firebase Firestore)
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(initialFamilyMembers);
-  const [familyInvestments, setFamilyInvestments] = useState<FamilyInvestment[]>(initialFamilyInvestments);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
-  const [memberToEdit, setMemberToEdit] = useState<FamilyMember | null>(null);
-
+  // FIX: useRef to avoid infinite loop
   const currentUserRef = useRef<Member | null>(null);
-  useEffect(() => {
-    currentUserRef.current = currentUser;
-  }, [currentUser]);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   const isFetchingRef = useRef(false);
 
   useEffect(() => {
     if (window.location.pathname === '/admin') setCurrentTab('admin');
-  }, []);
-
-  // --- Real-time Firebase Firestore Listeners ---
-  useEffect(() => {
-    // 1. Subscribe to family members in Firestore
-    const unsubFamily = subscribeFamilyMembers((remoteMembers) => {
-      if (remoteMembers && remoteMembers.length > 0) {
-        setFamilyMembers(remoteMembers);
-      } else {
-        // Auto-seed initial members to Firestore if collection is empty
-        initialFamilyMembers.forEach(async (m) => {
-          try {
-            await addFamilyMember(m);
-          } catch (e) {
-            // Ignore offline fallback
-          }
-        });
-        setFamilyMembers(initialFamilyMembers);
-      }
-    });
-
-    // 2. Subscribe to investments in Firestore
-    const unsubInv = subscribeInvestments((remoteInv) => {
-      if (remoteInv && remoteInv.length > 0) {
-        setFamilyInvestments(remoteInv);
-      } else {
-        initialFamilyInvestments.forEach(async (inv) => {
-          try {
-            await addInvestment(inv);
-          } catch (e) {}
-        });
-        setFamilyInvestments(initialFamilyInvestments);
-      }
-    });
-
-    return () => {
-      unsubFamily();
-      unsubInv();
-    };
   }, []);
 
   const safeFetch = async (url: string) => {
@@ -128,21 +65,15 @@ export default function App() {
     }
   };
 
+  // FIX: NO currentUser dependency!
   const fetchAppData = useCallback(async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
       const user = currentUserRef.current;
       const [
-        settingsRes,
-        statsRes,
-        membersRes,
-        monthlyRes,
-        lumpsumRes,
-        landsRes,
-        directorsRes,
-        galleryRes,
-        notifRes,
+        settingsRes, statsRes, membersRes, monthlyRes,
+        lumpsumRes, landsRes, directorsRes, galleryRes, notifRes,
       ] = await Promise.all([
         safeFetch('/api/settings'),
         safeFetch('/api/stats'),
@@ -152,12 +83,21 @@ export default function App() {
         safeFetch('/api/lands'),
         safeFetch('/api/directors'),
         safeFetch('/api/gallery'),
-        safeFetch(`/api/notifications${user ? `?member_id=${user.member_id}` : ''}`),
+        safeFetch(`/api/notifications${user? `?member_id=${user.member_id}` : ''}`),
       ]);
 
       if (settingsRes?.success && settingsRes.settings) setSettings(settingsRes.settings);
       if (statsRes?.success && statsRes.stats) setStats(statsRes.stats);
-      if (membersRes?.success && membersRes.members) setMembers(membersRes.members);
+      if (membersRes?.success && membersRes.members) {
+        setMembers(membersRes.members);
+        if (user) {
+          const freshUser = membersRes.members.find((m: Member) => m.member_id === user.member_id);
+          if (freshUser && JSON.stringify(freshUser)!== JSON.stringify(user)) {
+            setCurrentUser(freshUser);
+            localStorage.setItem('bob_logged_user', JSON.stringify(freshUser));
+          }
+        }
+      }
       if (monthlyRes?.success && monthlyRes.deposits) setMonthlyDeposits(monthlyRes.deposits);
       if (lumpsumRes?.success && lumpsumRes.deposits) setLumpsumDeposits(lumpsumRes.deposits);
       if (landsRes?.success && landsRes.lands) setLands(landsRes.lands);
@@ -167,9 +107,10 @@ export default function App() {
     } catch (err) {
       console.error('Error fetching app data:', err);
     } finally {
+      setLoading(false);
       isFetchingRef.current = false;
     }
-  }, []);
+  }, []); // FIX: Empty dependency!
 
   useEffect(() => {
     const cached = localStorage.getItem('bob_logged_user');
@@ -183,25 +124,51 @@ export default function App() {
       }
     }
     fetchAppData();
-  }, [fetchAppData]);
+
+    // Auto-update: background polling every 15 seconds for live data sync
+    const autoRefreshInterval = setInterval(() => {
+      fetchAppData();
+    }, 15000);
+
+    // Auto-update: immediately refresh when tab/window becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAppData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const unsubscribeRealtime = useFirebaseRealtime((event) => {
+      console.log('⚡ Realtime:', event.type);
+      // Throttle realtime refresh - 2 sec gap
+      setTimeout(() => fetchAppData(), 2000);
+    });
+
+    return () => {
+      clearInterval(autoRefreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribeRealtime();
+    };
+  }, []); // FIX: Run only once on mount!
 
   const handleLoginSuccess = (member: Member) => {
     setCurrentUser(member);
     localStorage.setItem('bob_logged_user', JSON.stringify(member));
     if (!member.has_accepted_terms) setShowTermsModal(true);
     if (member.role === 'Admin') setCurrentTab('admin');
-    else setCurrentTab('tree');
+    else setCurrentTab('dashboard');
+    setTimeout(() => fetchAppData(), 500);
   };
 
   const handleLogout = async () => {
     setCurrentUser(null);
     localStorage.removeItem('bob_logged_user');
-    setCurrentTab('tree');
+    setCurrentTab('home');
   };
 
   const handleTermsAccepted = () => {
     if (currentUser) {
-      const updated = { ...currentUser, has_accepted_terms: true };
+      const updated = {...currentUser, has_accepted_terms: true };
       setCurrentUser(updated);
       localStorage.setItem('bob_logged_user', JSON.stringify(updated));
     }
@@ -213,212 +180,44 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- Family Member Handlers ---
-  const handleOpenAddMember = () => {
-    setMemberToEdit(null);
-    setIsMemberModalOpen(true);
-  };
-
-  const handleOpenEditMember = (member: FamilyMember) => {
-    setMemberToEdit(member);
-    setIsMemberModalOpen(true);
-  };
-
-  const handleDeleteMember = async (id: string, name: string) => {
-    if (!window.confirm(`আপনি কি নিশ্চিত "${name}"-কে বংশলতিকা থেকে মুছে ফেলতে চান?`)) {
-      return;
-    }
-    try {
-      await deleteFamilyMember(id);
-      setFamilyMembers((prev) => prev.filter((m) => m.id !== id));
-    } catch (err: any) {
-      alert(`মুছে ফেলা সম্ভব হয়নি: ${err.message || 'ত্রুটি'}`);
-    }
-  };
-
-  const handleMemberSaved = (savedMember: FamilyMember) => {
-    setFamilyMembers((prev) => {
-      const idx = prev.findIndex((m) => m.id === savedMember.id);
-      if (idx >= 0) {
-        const updated = [...prev];
-        updated[idx] = savedMember;
-        return updated;
-      }
-      return [savedMember, ...prev];
-    });
-  };
-
-  const handleInvestmentAdded = (inv: FamilyInvestment) => {
-    setFamilyInvestments((prev) => [inv, ...prev]);
-  };
-
   const pendingCount = (stats?.pending_monthly_deposits || 0) + (stats?.pending_lumpsum_deposits || 0);
   const unreadNotificationsCount = notifications.filter(
-    (n) => currentUser && (!n.read_by || !n.read_by.includes(currentUser.member_id))
+    (n) => currentUser && (!n.read_by ||!n.read_by.includes(currentUser.member_id))
   ).length;
+
+  const handleMarkNotificationRead = async (id: string) => {
+    if (!currentUser) return;
+    try {
+      await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: id, member_id: currentUser.member_id }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) => n.id === id? {...n, read_by: [...(n.read_by || []), currentUser.member_id] } : n)
+      );
+    } catch (e) { console.error(e); }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} settings={settings} />}
-
-      <Header
-        currentTab={currentTab}
-        setCurrentTab={handleNavigateTab}
-        currentUser={currentUser}
-        onOpenAuth={() => setShowAuthModal(true)}
-        onLogout={handleLogout}
-        settings={settings}
-        pendingApprovalsCount={pendingCount}
-        unreadNotificationsCount={unreadNotificationsCount}
-        onOpenNotifications={() => setShowNotificationCenter(true)}
-      />
-
+      <Header currentTab={currentTab} setCurrentTab={handleNavigateTab} currentUser={currentUser} onOpenAuth={() => setShowAuthModal(true)} onLogout={handleLogout} settings={settings} pendingApprovalsCount={pendingCount} unreadNotificationsCount={unreadNotificationsCount} onOpenNotifications={() => setShowNotificationCenter(true)} onOpenR2Storage={() => setShowGlobalR2Modal(true)} />
       <NoticeTicker notice={settings?.notice_bengali || ''} />
-
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        {/* TAB 1: FAMILY TREE (বংশবৃক্ষ) */}
-        {currentTab === 'tree' && (
-          <FamilyTreeVisualizer
-            members={familyMembers}
-            onAddMember={handleOpenAddMember}
-            onEditMember={handleOpenEditMember}
-            onDeleteMember={handleDeleteMember}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-          />
-        )}
-
-        {/* TAB 2: MEMBERS DIRECTORY */}
-        {currentTab === 'members' && (
-          <FamilyTreeVisualizer
-            members={familyMembers}
-            onAddMember={handleOpenAddMember}
-            onEditMember={handleOpenEditMember}
-            onDeleteMember={handleDeleteMember}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-          />
-        )}
-
-        {/* TAB 3: BONDHON O BINIYOG (যৌথ সঞ্চয় ও বিনিয়োগ) */}
-        {currentTab === 'bondhon' && (
-          <BondhonBiniyogSection
-            investments={familyInvestments}
-            familyMembers={familyMembers}
-            lands={lands}
-            onInvestmentAdded={handleInvestmentAdded}
-          />
-        )}
-
-        {/* TAB 4: LAND PROJECTS */}
-        {currentTab === 'projects' && (
-          <div className="space-y-8">
-            <div className="text-center max-w-2xl mx-auto mb-8">
-              <span className="px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold uppercase tracking-wider inline-block mb-2">
-                পারিবারিক যৌথ ভূমি উদ্যোগ
-              </span>
-              <h1 className="text-3xl sm:text-4xl font-black text-white">আমাদের চলমান ভূমি প্রকল্পসমূহ</h1>
-              <p className="text-xs sm:text-sm text-slate-400 mt-2">
-                নিরাপদ দলিল, সীমানা প্রাচীর ও যৌথ মালিকানাভিত্তিক লাভজনক পারিবারিক ভূমি বিনিয়োগ
-              </p>
-            </div>
-            <BondhonBiniyogSection
-              investments={familyInvestments}
-              familyMembers={familyMembers}
-              lands={lands}
-              onInvestmentAdded={handleInvestmentAdded}
-            />
-          </div>
-        )}
-
-        {/* TAB 5: HERITAGE & HISTORY */}
-        {currentTab === 'about' && <FamilyHeritageSection />}
-
-        {/* TAB 6: ROI CALCULATOR */}
-        {currentTab === 'calculator' && (
-          <div className="py-6">
-            <RoiCalculator
-              lands={lands}
-              onBookShare={(_land) => {
-                handleNavigateTab('bondhon');
-              }}
-            />
-          </div>
-        )}
-
-        {/* USER DASHBOARD */}
-        {currentTab === 'dashboard' && currentUser && (
-          <UserDashboard
-            currentUser={currentUser}
-            monthlyDeposits={monthlyDeposits}
-            lumpsumDeposits={lumpsumDeposits}
-            lands={lands}
-            settings={settings}
-            notifications={notifications}
-            onOpenNotifications={() => setShowNotificationCenter(true)}
-            onRefreshData={fetchAppData}
-            onUpdateUser={setCurrentUser}
-          />
-        )}
-
-        {/* ADMIN CONTROL PANEL */}
-        {currentTab === 'admin' && (
-          <AdminPanel
-            currentUser={currentUser}
-            stats={stats}
-            settings={settings}
-            members={members}
-            monthlyDeposits={monthlyDeposits}
-            lumpsumDeposits={lumpsumDeposits}
-            lands={lands}
-            directors={directors}
-            onRefreshData={fetchAppData}
-            onOpenAuth={() => setShowAuthModal(true)}
-          />
-        )}
+      <main className="flex-1">
+        {currentTab === 'home' && <HomePage settings={settings} stats={stats} lands={lands} directors={directors} gallery={gallery} currentUser={currentUser} onOpenAuth={() => setShowAuthModal(true)} onNavigateTab={handleNavigateTab} onRefreshData={fetchAppData} />}
+        {currentTab === 'projects' && <div className="py-12"><div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8 text-center font-bengali"><span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold uppercase tracking-wider mb-2 inline-block">Investment Portfolio</span><h1 className="text-3xl sm:text-4xl font-black text-white">আমাদের চলমান ভূমি প্রকল্পসমূহ</h1><p className="text-sm text-slate-400 mt-2 max-w-xl mx-auto">১০ কাঠা থেকে ৩ বিঘা পর্যন্ত বিভিন্ন আকর্ষণীয় লোকেশনে যৌথ মালিকানা ভিত্তিক ভূমি প্রকল্প</p></div><HomePage settings={settings} stats={stats} lands={lands} directors={directors} gallery={gallery} currentUser={currentUser} onOpenAuth={() => setShowAuthModal(true)} onNavigateTab={handleNavigateTab} /></div>}
+        {currentTab === 'calculator' && <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"><RoiCalculator lands={lands} onBookShare={(land) => { if (currentUser) handleNavigateTab('dashboard'); else setShowAuthModal(true); }} /></div>}
+        {currentTab === 'directors' && <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 font-bengali"><div className="text-center max-w-2xl mx-auto mb-12 space-y-3"><span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold uppercase tracking-wider inline-block">পরিচালনা পর্ষদ</span><h1 className="text-3xl sm:text-4xl font-black text-white">দায়িত্বপ্রাপ্ত পরিচালনা কমিটি</h1><p className="text-sm text-slate-400">সততা, স্বচ্ছতা ও যৌথ কল্যাণে নিবেদিত আমাদের পরিচালনা পর্ষদ</p></div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">{directors.map((dir) => <div key={dir.director_id} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 text-center shadow-xl flex flex-col justify-between space-y-4"><div><div className="relative w-28 h-28 mx-auto mb-4"><img src={dir.photo_url} alt={dir.name} className="w-full h-full rounded-2xl object-cover border-2 border-emerald-500/60 shadow-lg" /></div><h3 className="text-xl font-bold text-white mb-1">{dir.name}</h3><p className="text-xs text-emerald-400 font-semibold mb-3">{dir.designation}</p><p className="text-xs text-slate-400 italic bg-slate-950/60 p-3 rounded-xl border border-slate-800">"{dir.message}"</p></div><div className="pt-3 border-t border-slate-800 flex justify-center gap-3 text-xs text-slate-400"><a href={`tel:${dir.phone.replace(/\s+/g, '')}`} className="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 hover:text-white transition"><i className="fa-solid fa-phone"></i></a><a href={`mailto:${dir.email}`} className="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 hover:text-white transition"><i className="fa-solid fa-envelope"></i></a></div></div>)}</div></div>}
+        {currentTab === 'gallery' && <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 font-bengali"><div className="text-center max-w-2xl mx-auto mb-12 space-y-3"><span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold uppercase tracking-wider inline-block">কার্যক্রম গ্যালারি</span><h1 className="text-3xl sm:text-4xl font-black text-white">সরেজমিন পরিদর্শন ও কার্যক্রমের আলোকচিত্র</h1><p className="text-sm text-slate-400">ভূমি নির্বাচন, সীমানা পিলার স্থাপন ও আইনি দলিল সম্পাদন প্রক্রিয়া</p></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">{gallery.map((item) => <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg"><div className="relative h-60 overflow-hidden"><img src={item.image_url} alt={item.title} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-80"></div><div className="absolute top-3 left-3 px-2.5 py-0.5 rounded-full bg-slate-950/80 backdrop-blur-md text-[10px] font-bold text-amber-300 border border-amber-400/30">{item.category}</div><div className="absolute bottom-3 left-3 right-3 text-white"><h4 className="text-sm font-bold leading-snug">{item.title}</h4><div className="flex items-center justify-between text-[11px] text-slate-300 mt-1"><span><i className="fa-solid fa-location-dot text-red-400 mr-1"></i>{item.location}</span><span className="font-num">{item.date}</span></div></div></div></div>)}</div></div>}
+        {currentTab === 'dashboard' && (currentUser? <UserDashboard currentUser={currentUser} monthlyDeposits={monthlyDeposits} lumpsumDeposits={lumpsumDeposits} lands={lands} settings={settings} notifications={notifications} onOpenNotifications={() => setShowNotificationCenter(true)} onRefreshData={fetchAppData} onUpdateUser={setCurrentUser} /> : <div className="max-w-md mx-auto px-4 py-20 text-center font-bengali"><div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 mx-auto mb-4 text-2xl"><i className="fa-solid fa-user-lock"></i></div><h2 className="text-2xl font-bold text-white mb-2">ড্যাশবোর্ডে প্রবেশের জন্য লগইন করুন</h2><p className="text-slate-400 text-sm mb-6">আপনার মাসিক কিস্তি জমা, এককালীন বিনিয়োগের হিসাব এবং ডিজিটাল রসিদ দেখতে অনুগ্রহ করে সদস্য অ্যাকাউন্টে লগইন করুন।</p><button onClick={() => setShowAuthModal(true)} className="cursor-pointer px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition inline-flex items-center gap-2"><i className="fa-solid fa-right-to-bracket"></i><span>লগইন করুন</span></button></div>)}
+        {currentTab === 'admin' && <AdminPanel currentUser={currentUser} stats={stats} settings={settings} members={members} monthlyDeposits={monthlyDeposits} lumpsumDeposits={lumpsumDeposits} lands={lands} directors={directors} onRefreshData={fetchAppData} onOpenAuth={() => setShowAuthModal(true)} />}
       </main>
-
       <Footer settings={settings} onNavigate={handleNavigateTab} />
-
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onLoginSuccess={handleLoginSuccess}
-        settings={settings}
-      />
-
-      {showTermsModal && currentUser && (
-        <TermsModal
-          member={currentUser}
-          onAccept={handleTermsAccepted}
-          onClose={() => setShowTermsModal(false)}
-        />
-      )}
-
-      <NotificationCenterModal
-        isOpen={showNotificationCenter}
-        onClose={() => setShowNotificationCenter(false)}
-        notifications={notifications}
-        currentMemberId={currentUser?.member_id}
-        onMarkRead={async (id) => {
-          if (!currentUser) return;
-          setNotifications((prev) =>
-            prev.map((n) =>
-              n.id === id ? { ...n, read_by: [...(n.read_by || []), currentUser.member_id] } : n
-            )
-          );
-        }}
-        onNavigateTab={handleNavigateTab}
-      />
-
-      {/* Add / Edit Family Member Modal */}
-      <FamilyMemberModal
-        isOpen={isMemberModalOpen}
-        onClose={() => setIsMemberModalOpen(false)}
-        memberToEdit={memberToEdit}
-        allMembers={familyMembers}
-        onSaved={handleMemberSaved}
-      />
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} onLoginSuccess={handleLoginSuccess} settings={settings} />
+      {showTermsModal && currentUser && <TermsModal member={currentUser} onAccept={handleTermsAccepted} onClose={() => setShowTermsModal(false)} />}
+      <NotificationCenterModal isOpen={showNotificationCenter} onClose={() => setShowNotificationCenter(false)} notifications={notifications} currentMemberId={currentUser?.member_id} onMarkRead={handleMarkNotificationRead} onNavigateTab={handleNavigateTab} />
+      <FirebaseCloudVaultModal isOpen={showGlobalR2Modal} onClose={() => setShowGlobalR2Modal(false)} isAdmin={currentUser?.role === 'Admin'} />
     </div>
   );
 }

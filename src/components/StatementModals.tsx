@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { Member, MonthlyDeposit, LumpsumDeposit, SystemSettings } from '../types';
 import { formatTaka, toBengaliDigits } from '../utils/bengaliUtils';
 import { downloadElementAsJpg, downloadElementAsPdf } from '../utils/exportUtils';
-import { uploadDataUrlToR2 } from '../services/r2Storage';
+import { uploadDataUrlToStorage } from '../services/cloudStorage';
 import html2canvas from 'html2canvas';
 
 interface StatementModalBaseProps {
@@ -79,15 +79,15 @@ export const PaidInstallmentsModal: React.FC<PaidInstallmentsModalProps> = ({
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
       const filename = `paid-stmt-${currentUser.member_id}-${Date.now()}.jpg`;
-      const res = await uploadDataUrlToR2(dataUrl, filename, 'statement');
+      const res = await uploadDataUrlToStorage(dataUrl, filename, 'statement');
       if (res.success) {
-        setFeedbackMsg('হিসাব বিবরণীটি সফলভাবে Cloudflare R2 বাকেটে সংরক্ষিত হয়েছে!');
+        setFeedbackMsg('হিসাব বিবরণীটি সফলভাবে Firebase ক্লাউডে সংরক্ষিত হয়েছে!');
         setTimeout(() => setFeedbackMsg(''), 4000);
       } else {
-        alert('R2 তে সংরক্ষণ করা সম্ভব হয়নি।');
+        alert('ক্লাউডে সংরক্ষণ করা সম্ভব হয়নি।');
       }
     } catch (err: any) {
-      alert(err.message || 'Cloudflare R2 তে সংরক্ষণ ব্যর্থ হয়েছে');
+      alert(err.message || 'Firebase ক্লাউডে সংরক্ষণ ব্যর্থ হয়েছে');
     } finally {
       setIsR2Saving(false);
     }
@@ -118,11 +118,11 @@ export const PaidInstallmentsModal: React.FC<PaidInstallmentsModalProps> = ({
             <button
               onClick={handleSaveToR2}
               disabled={isR2Saving}
-              className="cursor-pointer px-3 py-1.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Cloudflare R2 ক্লাউডে সেভ করুন"
+              className="cursor-pointer px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
+              title="Firebase ক্লাউড ভল্টে সেভ করুন"
             >
-              <i className="fa-solid fa-cloud text-orange-400"></i>
-              <span>{isR2Saving ? 'সংরক্ষণ হচ্ছে...' : 'R2 তে সেভ'}</span>
+              <i className="fa-solid fa-cloud text-amber-400"></i>
+              <span>{isR2Saving ? 'সংরক্ষণ হচ্ছে...' : 'ক্লাউডে সেভ'}</span>
             </button>
 
             <button
@@ -383,15 +383,15 @@ export const LumpsumDepositsModal: React.FC<LumpsumDepositsModalProps> = ({
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
       const filename = `lumpsum-stmt-${currentUser.member_id}-${Date.now()}.jpg`;
-      const res = await uploadDataUrlToR2(dataUrl, filename, 'statement');
+      const res = await uploadDataUrlToStorage(dataUrl, filename, 'statement');
       if (res.success) {
-        setFeedbackMsg('এককালীন জমার হিসাব বিবরণী Cloudflare R2 বাকেটে সংরক্ষিত হয়েছে!');
+        setFeedbackMsg('এককালীন জমার হিসাব বিবরণী Firebase ক্লাউডে সংরক্ষিত হয়েছে!');
         setTimeout(() => setFeedbackMsg(''), 4000);
       } else {
-        alert('R2 তে সংরক্ষণ করা সম্ভব হয়নি।');
+        alert('ক্লাউডে সংরক্ষণ করা সম্ভব হয়নি।');
       }
     } catch (err: any) {
-      alert(err.message || 'Cloudflare R2 তে সংরক্ষণ ব্যর্থ হয়েছে');
+      alert(err.message || 'Firebase ক্লাউডে সংরক্ষণ ব্যর্থ হয়েছে');
     } finally {
       setIsR2Saving(false);
     }
@@ -422,11 +422,11 @@ export const LumpsumDepositsModal: React.FC<LumpsumDepositsModalProps> = ({
             <button
               onClick={handleSaveToR2}
               disabled={isR2Saving}
-              className="cursor-pointer px-3 py-1.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Cloudflare R2 ক্লাউডে সেভ করুন"
+              className="cursor-pointer px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
+              title="Firebase ক্লাউড ভল্টে সেভ করুন"
             >
-              <i className="fa-solid fa-cloud text-orange-400"></i>
-              <span>{isR2Saving ? 'সংরক্ষণ হচ্ছে...' : 'R2 তে সেভ'}</span>
+              <i className="fa-solid fa-cloud text-amber-400"></i>
+              <span>{isR2Saving ? 'সংরক্ষণ হচ্ছে...' : 'ক্লাউডে সেভ'}</span>
             </button>
 
             <button
@@ -683,15 +683,15 @@ export const DueInstallmentsModal: React.FC<StatementModalBaseProps> = ({
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
       const filename = `due-stmt-${currentUser.member_id}-${Date.now()}.jpg`;
-      const res = await uploadDataUrlToR2(dataUrl, filename, 'statement');
+      const res = await uploadDataUrlToStorage(dataUrl, filename, 'statement');
       if (res.success) {
-        setFeedbackMsg('বকেয়া হিসাবের বিবরণী Cloudflare R2 বাকেটে সংরক্ষিত হয়েছে!');
+        setFeedbackMsg('বকেয়া হিসাবের বিবরণী Firebase ক্লাউডে সংরক্ষিত হয়েছে!');
         setTimeout(() => setFeedbackMsg(''), 4000);
       } else {
-        alert('R2 তে সংরক্ষণ করা সম্ভব হয়নি।');
+        alert('ক্লাউডে সংরক্ষণ করা সম্ভব হয়নি।');
       }
     } catch (err: any) {
-      alert(err.message || 'Cloudflare R2 তে সংরক্ষণ ব্যর্থ হয়েছে');
+      alert(err.message || 'Firebase ক্লাউডে সংরক্ষণ ব্যর্থ হয়েছে');
     } finally {
       setIsR2Saving(false);
     }
@@ -722,11 +722,11 @@ export const DueInstallmentsModal: React.FC<StatementModalBaseProps> = ({
             <button
               onClick={handleSaveToR2}
               disabled={isR2Saving}
-              className="cursor-pointer px-3 py-1.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Cloudflare R2 ক্লাউডে সেভ করুন"
+              className="cursor-pointer px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition"
+              title="Firebase ক্লাউড ভল্টে সেভ করুন"
             >
-              <i className="fa-solid fa-cloud text-orange-400"></i>
-              <span>{isR2Saving ? 'সংরক্ষণ হচ্ছে...' : 'R2 তে সেভ'}</span>
+              <i className="fa-solid fa-cloud text-amber-400"></i>
+              <span>{isR2Saving ? 'সংরক্ষণ হচ্ছে...' : 'ক্লাউডে সেভ'}</span>
             </button>
 
             <button
